@@ -3,7 +3,7 @@ name: Build APK
 on:
   workflow_dispatch:
   push:
-    branches: [main, master]
+    branches: [main, master, android-port]
     paths:
       - "app/**"
       - "android/**"
