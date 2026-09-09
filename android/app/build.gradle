@@ -1,0 +1,47 @@
+plugins {
+    id 'com.android.application'
+}
+
+android {
+    namespace 'com.dsa.mobile'
+    compileSdk 34
+
+    defaultConfig {
+        applicationId "com.dsa.mobile"
+        minSdk 21
+        targetSdk 34
+        versionCode 1
+        versionName "1.0.0"
+    }
+
+    buildTypes {
+        release {
+            minifyEnabled false
+            proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
+        }
+        debug {
+            applicationIdSuffix ".debug"
+            versionNameSuffix "-debug"
+        }
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_1_8
+        targetCompatibility JavaVersion.VERSION_1_8
+    }
+
+    lint {
+        abortOnError false
+    }
+
+    // 网页资产由 tools/sync_assets.py 从 ../app 同步而来
+    sourceSets {
+        main {
+            assets.srcDirs = ['src/main/assets']
+        }
+    }
+}
+
+// 纯 WebView 壳，零第三方依赖
+dependencies {
+}

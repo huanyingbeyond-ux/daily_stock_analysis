@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-theme="light">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <meta name="theme-color" content="#ffffff">
+    <meta name="description" content="LLM 驱动的股票智能分析手机版">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="default">
+    <meta name="apple-mobile-web-app-title" content="股票分析">
+    <title>股票智能分析</title>
+    <link rel="manifest" href="manifest.webmanifest">
+    <link rel="apple-touch-icon" href="icons/icon-192.png">
+    <link rel="icon" href="icons/icon-192.png">
+    <link rel="stylesheet" href="css/app.css?v=102">
+</head>
+
+<body>
+    <header class="topbar" id="topbar">
+        <div class="topbar-left">
+            <span class="app-title" id="page-title">自选股</span>
+            <span class="app-sub" id="page-sub"></span>
+        </div>
+        <div class="topbar-actions" id="topbar-actions"></div>
+    </header>
+
+    <main class="view" id="view">
+        <div class="boot">
+            <div class="boot-logo">📈</div>
+            <div class="boot-text">正在启动…</div>
+        </div>
+    </main>
+
+    <nav class="tabbar" id="tabbar">
+        <button class="tab" data-tab="watch">
+            <svg viewBox="0 0 24 24" class="tab-icon">
+                <path d="M3 12l9-8 9 8" /><path d="M5 10v10h14V10" />
+            </svg>
+            <span>自选</span>
+        </button>
+        <button class="tab" data-tab="market">
+            <svg viewBox="0 0 24 24" class="tab-icon">
+                <path d="M3 17l5-6 4 4 5-7 4 5" /><path d="M3 21h18" />
+            </svg>
+            <span>大盘</span>
+        </button>
+        <button class="tab" data-tab="tasks">
+            <svg viewBox="0 0 24 24" class="tab-icon">
+                <rect x="4" y="3" width="16" height="18" rx="2" /><path d="M8 8h8M8 12h8M8 16h5" />
+            </svg>
+            <span>报告</span>
+        </button>
+        <button class="tab" data-tab="settings">
+            <svg viewBox="0 0 24 24" class="tab-icon">
+                <circle cx="12" cy="12" r="3" />
+                <path d="M12 2v3M12 19v3M2 12h3M19 12h3M4.9 4.9l2.1 2.1M17 17l2.1 2.1M19.1 4.9L17 7M7 17l-2.1 2.1" />
+            </svg>
+            <span>设置</span>
+        </button>
+    </nav>
+
+    <div id="sheet-root"></div>
+
+    <script src="js/util.js?v=102"></script>
+    <script src="js/store.js?v=102"></script>
+    <script src="js/quote.js?v=102"></script>
+    <script src="js/chart.js?v=102"></script>
+    <script src="js/llm.js?v=102"></script>
+    <script src="js/analyzer.js?v=102"></script>
+    <script src="js/server.js?v=102"></script>
+    <script src="js/market.js?v=102"></script>
+    <script src="js/app.js?v=102"></script>
+</body>
+
+</html>

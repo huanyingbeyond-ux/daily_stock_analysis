@@ -1,0 +1,33 @@
+{
+    "name": "股票智能分析",
+    "short_name": "股票分析",
+    "description": "LLM 驱动的多市场股票智能分析系统（daily_stock_analysis 手机版）",
+    "lang": "zh-CN",
+    "start_url": "./index.html",
+    "scope": "./",
+    "display": "standalone",
+    "orientation": "portrait",
+    "background_color": "#ffffff",
+    "theme_color": "#ffffff",
+    "categories": ["finance", "productivity"],
+    "icons": [
+        {
+            "src": "icons/icon-192.png",
+            "sizes": "192x192",
+            "type": "image/png",
+            "purpose": "any"
+        },
+        {
+            "src": "icons/icon-512.png",
+            "sizes": "512x512",
+            "type": "image/png",
+            "purpose": "any"
+        },
+        {
+            "src": "icons/icon-maskable-512.png",
+            "sizes": "512x512",
+            "type": "image/png",
+            "purpose": "maskable"
+        }
+    ]
+}
