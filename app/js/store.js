@@ -28,7 +28,7 @@
     };
 
     var DEFAULT_WATCHLIST = [
-        { code: 'sh688525', name: '长鑫科技' },
+        { code: 'sh688525', name: '佰维存储' },
         { code: 'sz301189', name: '奥尼电子' },
         { code: 'sh688215', name: '瑞晟智能' },
         { code: 'sh688155', name: '先惠技术' },

@@ -1253,3 +1253,132 @@ a {
     border-radius: 20px;
     padding: 1px 7px;
 }
+
+/* ==========================================================
+ * 问股（Agent 策略问股）
+ * ========================================================== */
+.chat-box {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    padding: 4px 6px calc(172px + var(--safe-b));
+}
+
+.chat-hint {
+    text-align: center;
+    color: var(--text-3);
+    font-size: 13px;
+    padding: 22px 16px;
+    line-height: 1.6;
+}
+
+.chat-bubble {
+    max-width: 84%;
+    padding: 9px 12px;
+    border-radius: 15px;
+    font-size: 14px;
+    line-height: 1.55;
+    word-break: break-word;
+    white-space: normal;
+}
+
+.chat-bubble.user {
+    align-self: flex-end;
+    background: var(--brand);
+    color: #fff;
+    border-bottom-right-radius: 4px;
+}
+
+.chat-bubble.agent {
+    align-self: flex-start;
+    background: var(--card-2);
+    color: var(--text);
+    border-bottom-left-radius: 4px;
+    border: 1px solid var(--border);
+}
+
+.chat-bubble.agent .md-p { margin: 4px 0; color: var(--text); }
+.chat-bubble.agent .md-p:last-child,
+.chat-bubble.agent .md-ul:last-child { margin-bottom: 0; }
+.chat-bubble.agent .md-ul { color: var(--text); }
+.chat-bubble.agent .md-pre { background: var(--card); color: var(--text); }
+
+.chat-bubble.loading .typing {
+    color: var(--text-3);
+    font-style: italic;
+}
+
+.chat-dock {
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: calc(52px + var(--safe-b));
+    z-index: 45;
+    background: color-mix(in srgb, var(--bg) 94%, transparent);
+    backdrop-filter: saturate(180%) blur(14px);
+    -webkit-backdrop-filter: saturate(180%) blur(14px);
+    border-top: 1px solid var(--border);
+    padding: 6px 10px calc(6px + var(--safe-b));
+}
+
+.chip-row {
+    display: flex;
+    gap: 8px;
+    overflow-x: auto;
+    padding-bottom: 6px;
+    -webkit-overflow-scrolling: touch;
+}
+.chip-row::-webkit-scrollbar { display: none; }
+.chip {
+    flex: 0 0 auto;
+    border: 1px solid var(--border);
+    background: var(--card);
+    color: var(--text-2);
+    border-radius: 20px;
+    padding: 6px 12px;
+    font-size: 12.5px;
+    white-space: nowrap;
+    cursor: pointer;
+}
+.chip:active { background: var(--card-2); color: var(--brand); }
+
+.chat-bar {
+    display: flex;
+    align-items: flex-end;
+    gap: 8px;
+}
+
+.chat-input {
+    flex: 1;
+    resize: none;
+    min-height: 40px;
+    max-height: 120px;
+    line-height: 1.4;
+    padding: 9px 12px;
+}
+
+.chat-send {
+    flex: 0 0 auto;
+    height: 40px;
+    padding: 0 16px;
+}
+
+/* ==========================================================
+ * 自选页编辑态（管理 / 删除 / 排序）
+ * ========================================================== */
+.stock-row.editing {
+    cursor: default;
+    background: var(--card-2);
+}
+.stock-row.editing:active { background: var(--card-2); }
+
+.row-actions {
+    display: flex;
+    gap: 6px;
+    flex: 0 0 auto;
+}
+.row-actions .btn-sm {
+    min-width: 34px;
+    padding: 6px 8px;
+    font-size: 13px;
+}

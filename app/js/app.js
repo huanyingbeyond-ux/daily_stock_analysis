@@ -20,6 +20,8 @@
         timer: null,
         detail: null,          // {code, sheet, chartCtrl, period, minuteCtrl, data}
         lastDetailRendered: 0,
+        editMode: false,       // 自选页编辑态（显示删除/排序）
+        chat: { messages: [], lastCode: null, busy: false }, // 问股对话
         sheetStack: []         // 打开的浮层栈（Android 返回键用）
     };
 
@@ -103,6 +105,10 @@
         setTitle('自选股', '红涨绿跌 · ' + DSA.store.watchlist.length + ' 只');
         setActions([
             el('button.icon-btn', {
+                text: state.editMode ? '完成' : '管理',
+                onclick: function () { state.editMode = !state.editMode; renderWatch(); }
+            }),
+            el('button.icon-btn', {
                 text: '＋',
                 onclick: function () { openAddSheet(); }
             }),
@@ -152,7 +158,8 @@
         list.forEach(function (s) {
             var q = state.quotes[s.code];
             var rep = state.reports[s.code] || DSA.store.getReport(s.code);
-            var row = el('div.stock-row', { dataset: { id: s.id }, onclick: function () { openDetail(s.code, s.name); } });
+            var row = el('div.stock-row' + (state.editMode ? '.editing' : ''), { dataset: { id: s.id } });
+            if (!state.editMode) row.onclick = function () { openDetail(s.code, s.name); };
             row.appendChild(el('div.stock-main', {}, [
                 el('div.stock-name', {}, [
                     document.createTextNode(q && q.name ? q.name : s.name),
@@ -161,15 +168,39 @@
                 ]),
                 el('div.stock-code', { text: s.code.toUpperCase() })
             ]));
-            var priceBox = el('div.stock-price');
-            if (q && !isNaN(q.price)) {
-                priceBox.appendChild(el('div.price.' + priceClass(q.changePct), { text: U.num(q.price) }));
-                priceBox.appendChild(pctChip(q.changePct));
+            if (state.editMode) {
+                var actions = el('div.row-actions');
+                actions.appendChild(el('button.btn.btn-sm', {
+                    text: '↑', onclick: function (e) {
+                        e.stopPropagation(); DSA.store.moveStock(s.id, -1); renderWatchRows(box);
+                    }
+                }));
+                actions.appendChild(el('button.btn.btn-sm', {
+                    text: '↓', onclick: function (e) {
+                        e.stopPropagation(); DSA.store.moveStock(s.id, 1); renderWatchRows(box);
+                    }
+                }));
+                actions.appendChild(el('button.btn.btn-sm.btn-danger', {
+                    text: '删', onclick: function (e) {
+                        e.stopPropagation();
+                        if (DSA.store.watchlist.length <= 1) { U.toast('至少保留一只自选股', 'warn'); return; }
+                        DSA.store.removeStock(s.id);
+                        delete state.quotes[s.code];
+                        renderWatch();
+                    }
+                }));
+                row.appendChild(actions);
             } else {
-                priceBox.appendChild(el('div.price.flat', { text: '--' }));
-                priceBox.appendChild(el('div.pct.flat', { text: '--' }));
+                var priceBox = el('div.stock-price');
+                if (q && !isNaN(q.price)) {
+                    priceBox.appendChild(el('div.price.' + priceClass(q.changePct), { text: U.num(q.price) }));
+                    priceBox.appendChild(pctChip(q.changePct));
+                } else {
+                    priceBox.appendChild(el('div.price.flat', { text: '--' }));
+                    priceBox.appendChild(el('div.pct.flat', { text: '--' }));
+                }
+                row.appendChild(priceBox);
             }
-            row.appendChild(priceBox);
             box.appendChild(row);
         });
     }
@@ -1237,6 +1268,119 @@
     }
 
     // ==========================================================
+    // 问股（Agent 策略问股）
+    // ==========================================================
+    var CHAT_KEY = 'dsa.chat.v1';
+    function loadChat() {
+        try { state.chat.messages = (U.LS.get(CHAT_KEY, []) || []).slice(-40); } catch (e) { state.chat.messages = []; }
+    }
+    function saveChat() {
+        try { U.LS.set(CHAT_KEY, state.chat.messages.slice(-40)); } catch (e) { }
+    }
+
+    function renderChat() {
+        state.tab = 'chat';
+        setTitle('问股', 'Agent 策略问股 · 多轮对话');
+        setActions([]);
+        var view = U.clear($('#view'));
+
+        if (!DSA.store.llmReady()) {
+            view.appendChild(el('div.empty', {}, [
+                el('span.empty-icon', { text: '💬' }),
+                el('div', { text: '请先到「设置」填写大模型 API Key 后才能问股' })
+            ]));
+            return;
+        }
+
+        var box = el('div.chat-box', { id: 'chat-box' });
+        view.appendChild(box);
+        var msgs = state.chat.messages;
+        if (!msgs.length) {
+            box.appendChild(el('div.chat-hint', { text: '试着问：用缠论分析 600519 · 佰维存储今天怎么看 · 大盘为什么跌' }));
+        } else {
+            msgs.forEach(function (m) { box.appendChild(chatBubble(m.role, m.content)); });
+        }
+
+        var chips = el('div.chip-row');
+        DSA.chat.STRATEGIES.forEach(function (s) {
+            chips.appendChild(el('button.chip', {
+                text: s, onclick: function () { setChatInput('请使用【' + s + '】策略分析 '); }
+            }));
+        });
+
+        var input = el('textarea.input.chat-input', { id: 'chat-input', placeholder: '问点什么，如：用均线金叉分析 600519', rows: 1 });
+        var sendBtn = el('button.btn.btn-primary.chat-send', { text: '发送' });
+        var bar = el('div.chat-bar', {}, [input, sendBtn]);
+
+        view.appendChild(el('div.chat-dock', {}, [chips, bar]));
+
+        function doSend() {
+            var t = input.value.trim();
+            if (!t || state.chat.busy) return;
+            input.value = '';
+            input.style.height = 'auto';
+            sendChat(t);
+        }
+        sendBtn.onclick = doSend;
+        input.addEventListener('keydown', function (e) {
+            if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); doSend(); }
+        });
+        input.addEventListener('input', function () {
+            input.style.height = 'auto';
+            input.style.height = Math.min(input.scrollHeight, 120) + 'px';
+        });
+
+        setTimeout(function () { scrollChatToBottom(box); }, 60);
+    }
+
+    function chatBubble(role, content) {
+        var b = el('div.chat-bubble.' + (role === 'user' ? 'user' : 'agent'));
+        if (role === 'user') b.appendChild(document.createTextNode(content));
+        else b.innerHTML = U.markdown(content);
+        return b;
+    }
+
+    function scrollChatToBottom(box) {
+        var v = $('#view');
+        if (v) v.scrollTop = v.scrollHeight;
+        if (box) box.scrollTop = box.scrollHeight;
+    }
+
+    function setChatInput(t) {
+        var inp = $('#chat-input');
+        if (inp) { inp.value = t; inp.focus(); }
+    }
+
+    function sendChat(text) {
+        var box = $('#chat-box');
+        if (!box) return;
+        state.chat.messages.push({ role: 'user', content: text });
+        box.appendChild(chatBubble('user', text));
+        var loading = el('div.chat-bubble.agent.loading', {}, [el('div.typing', { text: '思考中…' })]);
+        box.appendChild(loading);
+        scrollChatToBottom(box);
+        state.chat.busy = true;
+
+        var history = state.chat.messages.slice(0, -1);
+        var reuse = state.chat.lastCode;
+        DSA.chat.ask(text, history, { reuseCode: reuse })
+            .then(function (r) {
+                if (r.codes && r.codes.length) state.chat.lastCode = r.codes[0].tencent;
+                state.chat.messages.push({ role: 'assistant', content: r.answer });
+                saveChat();
+                if (loading.parentNode) loading.parentNode.removeChild(loading);
+                box.appendChild(chatBubble('assistant', r.answer));
+                scrollChatToBottom(box);
+            })
+            .catch(function (e) {
+                if (loading.parentNode) loading.parentNode.removeChild(loading);
+                box.appendChild(chatBubble('assistant', '⚠️ ' + (e && e.message ? e.message : '问股失败，请稍后重试')));
+                scrollChatToBottom(box);
+            })
+            .then(function () { state.chat.busy = false; });
+    }
+
+    // ==========================================================
     // 路由
     // ==========================================================
     function renderCurrent(keepScroll) {
@@ -1244,6 +1388,7 @@
         if (state.tab === 'watch') renderWatch();
         else if (state.tab === 'market') renderMarket();
         else if (state.tab === 'tasks') renderTasks();
+        else if (state.tab === 'chat') renderChat();
         else renderSettings();
         if (keepScroll) window.scrollTo(0, y);
     }
@@ -1309,6 +1454,9 @@
         // 恢复内存报告缓存
         var bag = DSA.store.allReports();
         Object.keys(bag).forEach(function (k) { state.reports[k] = bag[k].data; });
+
+        // 恢复问股对话
+        loadChat();
 
         $$('.tab').forEach(function (t) { t.classList.toggle('active', t.dataset.tab === 'watch'); });
         renderWatch();
