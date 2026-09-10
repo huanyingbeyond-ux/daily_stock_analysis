@@ -2,21 +2,22 @@
  * DSA Mobile - sw.js
  * Service Worker：缓存应用外壳，离线可用；行情数据永不缓存。
  * ============================================================ */
-var CACHE = 'dsa-shell-v103';
+var CACHE = 'dsa-shell-v104';
 var SHELL = [
     './',
     './index.html',
-    './css/app.css?v=103',
-    './js/util.js?v=103',
-    './js/store.js?v=103',
-    './js/quote.js?v=103',
-    './js/chart.js?v=103',
-    './js/llm.js?v=103',
-    './js/analyzer.js?v=103',
-    './js/server.js?v=103',
-    './js/market.js?v=103',
-    './js/chat.js?v=103',
-    './js/app.js?v=103',
+    './css/app.css?v=104',
+    './js/util.js?v=104',
+    './js/store.js?v=104',
+    './js/quote.js?v=104',
+    './js/chart.js?v=104',
+    './js/llm.js?v=104',
+    './js/analyzer.js?v=104',
+    './js/server.js?v=104',
+    './js/market.js?v=104',
+    './js/chat.js?v=104',
+    './js/sentiment.js?v=104',
+    './js/app.js?v=104',
     './manifest.webmanifest',
     './icons/icon-192.png',
     './icons/icon-512.png',
