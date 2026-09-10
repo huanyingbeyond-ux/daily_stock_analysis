@@ -22,6 +22,7 @@
         lastDetailRendered: 0,
         editMode: false,       // 自选页编辑态（显示删除/排序）
         chat: { messages: [], lastCode: null, busy: false }, // 问股对话
+        sentimentData: null,   // 舆情快照 {ts, snap, market, sectors, diff, dist, quotes}
         sheetStack: []         // 打开的浮层栈（Android 返回键用）
     };
 
@@ -1381,12 +1382,304 @@
     }
 
     // ==========================================================
+    // 舆情热度页
+    // ==========================================================
+    function loadSentiment() {
+        return DSA.market.snapshot().then(function (snap) {
+            var quotes = {};
+            (snap.watch.quotes || []).forEach(function (q) { quotes[q.code] = q; });
+            // 补全：快照未覆盖的自选股用内存行情
+            DSA.store.watchlist.forEach(function (s) {
+                if (!quotes[s.code] && state.quotes[s.code]) quotes[s.code] = state.quotes[s.code];
+            });
+            var market = DSA.sentiment.marketTemperature(snap);
+            var sectors = DSA.sentiment.sectorTemps(snap);
+            var diff = DSA.sentiment.diffSectors(sectors);
+            var dist = DSA.sentiment.distribution(quotes);
+            state.sentimentData = { ts: snap.ts, snap: snap, market: market, sectors: sectors, diff: diff, dist: dist, quotes: quotes };
+            return state.sentimentData;
+        });
+    }
+
+    function heatRing(score, layer, sizeClass) {
+        var bg = layer.tone === 'up' ? 'var(--up)' : layer.tone === 'down' ? 'var(--down)' : 'var(--card-2)';
+        var color = layer.tone === 'flat' ? 'var(--text)' : '#fff';
+        return el('div.score-ring' + (sizeClass ? '.' + sizeClass : ''), {
+            style: { background: bg, color: color },
+            html: score + '<span class="sr-sub">' + layer.label + '</span>'
+        });
+    }
+
+    function renderSentiment(force) {
+        state.tab = 'sentiment';
+        stopAutoRefresh();
+        setTitle('舆情热度', '由行情信号推导的市场情绪温度');
+        setActions([el('button.icon-btn', { text: '⟳', onclick: function () { renderSentiment(true); } })]);
+
+        var view = U.clear($('#view'));
+        if (!state.sentimentData || force) {
+            view.appendChild(el('div.card', {}, [el('div.card-body', {}, skeleton(4))]));
+            loadSentiment().then(function () {
+                if (state.tab === 'sentiment') renderSentiment();
+            }).catch(function (e) {
+                if (state.tab !== 'sentiment') return;
+                U.clear(view);
+                view.appendChild(el('div.empty', { text: '舆情数据加载失败：' + e.message }));
+            });
+            return;
+        }
+
+        var data = state.sentimentData;
+        setTitle('舆情热度', U.timeText(data.ts) + ' 更新');
+
+        // ---- 全市场情绪温度 ----
+        var m = data.market;
+        var mkCard = el('div.card', { style: { marginTop: '10px' } });
+        var mkBody = el('div.card-body');
+        mkCard.appendChild(mkBody);
+        mkBody.appendChild(el('div.card-title', { text: '🌡 全市场情绪温度' }));
+        mkBody.appendChild(el('div.row-between', { style: { alignItems: 'center', marginTop: '6px' } }, [
+            heatRing(m.score, m.layer, 'heat-ring'),
+            el('div', { style: { flex: '1', paddingLeft: '14px' } }, [
+                el('div', { style: { fontSize: '15px', fontWeight: '700' }, text: '市场情绪：' + m.layer.label + ' ' + m.layer.emoji }),
+                el('div', { style: { fontSize: '12.5px', color: 'var(--text-3)', marginTop: '4px', lineHeight: '1.6' },
+                    text: '综合主要指数、涨跌停与自选表现推导。温度越高代表市场关注度/交易情绪越亢奋，过热需警惕拥挤交易。' }),
+                el('div', { style: { fontSize: '12.5px', marginTop: '6px', display: 'flex', gap: '14px', fontVariantNumeric: 'tabular-nums' } }, [
+                    el('span', {}, ['涨停 ', el('b.' + priceClass(1), { text: m.limitUp == null ? '--' : m.limitUp })]),
+                    el('span', {}, ['跌停 ', el('b.' + priceClass(-1), { text: m.limitDown == null ? '--' : m.limitDown })]),
+                    el('span', {}, ['指数均 ', el('b.' + priceClass(m.avgIdx), { text: U.pct(m.avgIdx) })])
+                ])
+            ])
+        ]));
+        view.appendChild(mkCard);
+
+        // ---- 板块温度榜（领热/领冷 + 升温降温）----
+        function sectorCard(title, list, withDelta) {
+            if (!list || !list.length) return null;
+            var maxAbs = Math.max.apply(null, list.map(function (s) { return Math.abs(s.changePct); })) || 1;
+            var card = el('div.card', { style: { marginTop: '10px' } });
+            var cb = el('div.card-body');
+            card.appendChild(cb);
+            cb.appendChild(el('div.card-title', { text: title }));
+            list.forEach(function (s) {
+                var deltaBadge = null;
+                if (withDelta && s.delta != null) {
+                    var up = s.delta > 0;
+                    deltaBadge = el('span.sent-delta.' + (up ? 'up' : 'down'), {
+                        text: (up ? '▲' : '▼') + Math.abs(s.delta)
+                    });
+                }
+                cb.appendChild(el('div.rank-row', {}, [
+                    el('div.rank-name', {}, [document.createTextNode(s.name), deltaBadge]),
+                    el('div.bar-track', {}, [el('i', {
+                        style: {
+                            width: Math.max(3, Math.abs(s.changePct) / maxAbs * 100) + '%',
+                            background: U.dir(s.changePct) >= 0 ? 'var(--up)' : 'var(--down)'
+                        }
+                    })]),
+                    el('div', {
+                        style: { width: '58px', textAlign: 'right', fontVariantNumeric: 'tabular-nums', fontSize: '13px' },
+                        class: priceClass(s.changePct), text: U.pct(s.changePct)
+                    })
+                ]));
+            });
+            return card;
+        }
+        var hot = data.sectors.slice(0, 6);
+        var cold = data.sectors.slice(-6).reverse();
+        var warming = data.diff.filter(function (s) { return s.delta != null && s.delta > 0; }).slice(0, 5).map(function (s) {
+            return { name: s.name, changePct: s.changePct, delta: s.delta };
+        });
+        var cooling = data.diff.filter(function (s) { return s.delta != null && s.delta < 0; }).slice(-5).reverse().map(function (s) {
+            return { name: s.name, changePct: s.changePct, delta: s.delta };
+        });
+        var hotCard = sectorCard('🔥 领热板块', hot, false);
+        if (hotCard) view.appendChild(hotCard);
+        var warmCard = sectorCard('📈 升温板块', warming, true);
+        if (warmCard) view.appendChild(warmCard);
+        var coldCard = sectorCard('🧊 领冷板块', cold, false);
+        if (coldCard) view.appendChild(coldCard);
+        var coolCard = sectorCard('📉 降温板块', cooling, true);
+        if (coolCard) view.appendChild(coolCard);
+
+        // ---- 自选股舆情热度 ----
+        var wlCard = el('div.card', { style: { marginTop: '10px' } });
+        var wlBody = el('div.card-body');
+        wlCard.appendChild(wlBody);
+        wlBody.appendChild(el('div.card-title', { text: '📌 自选股舆情热度' }));
+        if (!data.dist.list.length) {
+            wlBody.appendChild(el('div.field-hint', { text: '暂无自选股行情，请先添加股票。' }));
+        } else {
+            data.dist.list.forEach(function (item) {
+                var h = item.heat;
+                wlBody.appendChild(el('div.stock-row', {
+                    style: { padding: '10px 4px' },
+                    onclick: function () { openStockSentiment(item.code, item.name); }
+                }, [
+                    el('div.stock-main', {}, [
+                        el('div.stock-name', { text: item.name }),
+                        el('div.stock-code', { text: item.code.toUpperCase() })
+                    ]),
+                    heatRing(h.heat, h.layer),
+                    el('div.stock-price', { style: { minWidth: '64px' } }, [
+                        el('div', { style: { fontSize: '12px', color: 'var(--text-2)' }, text: h.sentiment.emoji + ' ' + h.sentiment.label }),
+                        pctChip(h.factors.changePct)
+                    ])
+                ]));
+            });
+        }
+        view.appendChild(wlCard);
+
+        // ---- 情绪分布 ----
+        if (data.dist.list.length) {
+            var c = data.dist.counts;
+            var total = c.freeze + c.cold + c.neutral + c.hot + c.overheat || 1;
+            var distCard = el('div.card', { style: { marginTop: '10px' } });
+            var dBody = el('div.card-body');
+            distCard.appendChild(dBody);
+            dBody.appendChild(el('div.card-title', { text: '📊 自选情绪分布' }));
+            var seg = el('div.dist-bar');
+            DSA.sentiment.LAYERS.slice().reverse().forEach(function (L) {
+                var n = c[L.key];
+                if (!n) return;
+                seg.appendChild(el('i', {
+                    style: {
+                        flex: n,
+                        background: L.tone === 'up' ? 'var(--up)' : L.tone === 'down' ? 'var(--down)' : 'var(--text-3)'
+                    }
+                }));
+            });
+            dBody.appendChild(seg);
+            var legend = el('div.dist-legend');
+            DSA.sentiment.LAYERS.slice().reverse().forEach(function (L) {
+                if (!c[L.key]) return;
+                legend.appendChild(el('span.dist-legend-item', {}, [
+                    el('i.dot', { style: { background: L.tone === 'up' ? 'var(--up)' : L.tone === 'down' ? 'var(--down)' : 'var(--text-3)' } }),
+                    L.label + ' ' + c[L.key]
+                ]));
+            });
+            dBody.appendChild(legend);
+            view.appendChild(distCard);
+        }
+    }
+
+    function openStockSentiment(code, name) {
+        var meta = DSA.quote.normalize(code);
+        openSheet(function (body, ctx) {
+            var root = el('div', { id: 'sent-root' }, skeleton(3));
+            body.appendChild(root);
+            Promise.all([
+                DSA.quote.realtime([code]).then(function (r) { return r[0]; }).catch(function () { return null; }),
+                DSA.quote.kline(code, 'day', 60).catch(function () { return []; })
+            ]).then(function (res) {
+                var q = res[0];
+                U.clear(root);
+                if (!q) { root.appendChild(el('div.empty', { text: '行情获取失败' })); return; }
+                if (q.name && ctx.setName) ctx.setName(q.name);
+                var heat = DSA.sentiment.stockHeat(q);
+                if (!heat) { root.appendChild(el('div.empty', { text: '暂无数据' })); return; }
+                renderStockSentiment(root, q, heat, ctx);
+            }).catch(function (e) {
+                U.clear(root);
+                root.appendChild(el('div.empty', { text: '加载失败：' + e.message }));
+            });
+        }, { title: name || code, sub: '舆情解读' });
+    }
+
+    function renderStockSentiment(root, q, heat, ctx) {
+        U.clear(root);
+        // 报价头
+        root.appendChild(el('div.card', {}, [el('div.card-body', {}, [
+            el('div.row-between', {}, [
+                el('div', {}, [
+                    el('div', { style: { fontSize: '26px', fontWeight: '700', lineHeight: '1.15', fontVariantNumeric: 'tabular-nums' }, class: priceClass(q.changePct), text: U.num(q.price) }),
+                    el('div', { style: { fontSize: '13px', fontVariantNumeric: 'tabular-nums' }, class: priceClass(q.changePct) },
+                        U.num(q.change, 2, true) + ' ' + U.pct(q.changePct))
+                ]),
+                el('div', { style: { textAlign: 'right', fontSize: '12px', color: 'var(--text-3)', lineHeight: '1.7' } }, [
+                    el('div', { text: '今开 ' + U.num(q.open) }),
+                    el('div', { text: '最高 ' + U.num(q.high) }),
+                    el('div', { text: '最低 ' + U.num(q.low) }),
+                    el('div', { text: '昨收 ' + U.num(q.prevClose) })
+                ])
+            ])
+        ])]));
+
+        // 热度 + 情绪倾向
+        root.appendChild(el('div.card', { style: { marginTop: '10px' } }, [el('div.card-body', {}, [
+            el('div.row-between', { style: { alignItems: 'center' } }, [
+                heatRing(heat.heat, heat.layer, 'heat-ring'),
+                el('div', { style: { flex: '1', paddingLeft: '14px' } }, [
+                    el('div', { style: { fontSize: '15px', fontWeight: '700' }, text: '温度分层：' + heat.layer.label + ' ' + heat.layer.emoji }),
+                    el('div', { style: { fontSize: '13px', marginTop: '4px' }, class: priceClass(heat.factors.changePct) },
+                        '情绪倾向：' + heat.sentiment.emoji + ' ' + heat.sentiment.label),
+                    el('div', { style: { fontSize: '12px', color: 'var(--text-3)', marginTop: '4px' },
+                        text: '热度(0-100) 越高代表市场关注度/交易情绪越亢奋。' })
+                ])
+            ])
+        ])]));
+
+        // 因子分解
+        var maxAbs = Math.max(40, Math.abs(heat.factors.changePct) * 2.2, heat.vol, heat.amp);
+        function barRow(label, val, pct, color) {
+            return el('div.factor-row', {}, [
+                el('div.factor-label', { text: label }),
+                el('div.bar-track', { style: { flex: '1' } }, [el('i', { style: { width: Math.max(3, pct / maxAbs * 100) + '%', background: color } })]),
+                el('div.factor-val', { text: val })
+            ]);
+        }
+        root.appendChild(el('div.card', { style: { marginTop: '10px' } }, [el('div.card-body', {}, [
+            el('div.card-title', { text: '🔍 热度因子' }),
+            barRow('情绪强度', heat.emo + '', heat.emo, 'var(--brand)'),
+            barRow('量比', heat.factors.volumeRatio == null ? '--' : U.num(heat.factors.volumeRatio), heat.vol, 'var(--up)'),
+            barRow('换手率', heat.factors.turnoverRate == null ? '--' : U.num(heat.factors.turnoverRate) + '%', heat.vol, 'var(--up)'),
+            barRow('振幅', heat.factors.amplitude == null ? '--' : U.num(heat.factors.amplitude) + '%', heat.amp, 'var(--down)')
+        ])]));
+
+        // AI 舆情解读
+        var aiCard = el('div.card', { style: { marginTop: '10px' } });
+        var aiBody = el('div.card-body');
+        aiCard.appendChild(aiBody);
+        aiBody.appendChild(el('div.row-between', {}, [
+            el('div.card-title', { text: '🧠 AI 舆情解读' }),
+            el('button.btn.btn-sm.btn-primary', {
+                text: '生成',
+                onclick: function (e) { runSentimentAI(q, heat, aiBody, e.target); }
+            })
+        ]));
+        aiBody.appendChild(el('div.field-hint', { text: '基于行情与热度数据，由大模型解读市场关注度、多空态度与舆情信号，需已配置大模型。' }));
+        root.appendChild(aiCard);
+    }
+
+    function runSentimentAI(q, heat, body, btn) {
+        if (!DSA.store.llmReady()) { U.toast('请先到「设置」填写大模型 API Key', 'warn'); return; }
+        var node = el('div', { style: { marginTop: '8px' } }, [
+            el('div.md-p', { style: { display: 'flex', alignItems: 'center', gap: '8px' } }, [
+                el('span.spinner'), el('span', { text: '正在解读…' })
+            ]),
+            el('div.progress-line', {}, [el('i')])
+        ]);
+        if (btn) btn.disabled = true;
+        DSA.sentiment.aiInterpret(q.code, q.name, q, heat).then(function (text) {
+            U.clear(node);
+            node.appendChild(el('div', { html: U.markdown(text) }));
+            if (btn) btn.disabled = false;
+        }).catch(function (e) {
+            U.clear(node);
+            node.appendChild(el('div.md-p', { style: { color: 'var(--danger)' }, text: '生成失败：' + e.message }));
+            if (btn) btn.disabled = false;
+        });
+        body.appendChild(node);
+    }
+
+    // ==========================================================
     // 路由
     // ==========================================================
     function renderCurrent(keepScroll) {
         var y = keepScroll ? window.scrollY : 0;
         if (state.tab === 'watch') renderWatch();
         else if (state.tab === 'market') renderMarket();
+        else if (state.tab === 'sentiment') renderSentiment();
         else if (state.tab === 'tasks') renderTasks();
         else if (state.tab === 'chat') renderChat();
         else renderSettings();
@@ -1397,6 +1690,7 @@
         if (state.tab === tab) {
             if (tab === 'watch') refreshWatch(true);
             else if (tab === 'market') renderMarket(true);
+            else if (tab === 'sentiment') renderSentiment(true);
             else if (tab === 'tasks') renderTasks();
             return;
         }
@@ -1429,6 +1723,7 @@
             if (dy > 70 && window.scrollY <= 0 && !document.querySelector('.sheet')) {
                 if (state.tab === 'watch') refreshWatch(true);
                 else if (state.tab === 'market') renderMarket(true);
+                else if (state.tab === 'sentiment') renderSentiment(true);
             }
         });
     }
